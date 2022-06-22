@@ -1,11 +1,11 @@
 # SecretManagement extension for 1Password
 
-This is a
+This is a forked version of
 [SecretManagement](https://github.com/PowerShell/SecretManagement)
 extension for
 [1Password](https://1password.com/).
 It leverages the [`1password-cli`](https://support.1password.com/command-line/)
-to interact with 1Password.
+to interact with 1Password. It is being tweaked to work with CLI version 2.
 
 ## Prerequisites
 
