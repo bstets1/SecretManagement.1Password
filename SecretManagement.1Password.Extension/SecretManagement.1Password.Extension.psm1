@@ -22,28 +22,28 @@ function Test-SecretVault {
     if (-not $VaultParameters.SecretKey) { throw '1Password: You must specify an SecretKey for your 1Password Account to test' }
 
     Write-Verbose "Test listing vaults"
-    $vaults = & op list vaults 2>$null | ConvertFrom-Json
+    $vaults = & op vault list 2>$null | ConvertFrom-Json
 
     if ($null -eq $vaults) {
         if ( $null -eq [System.Environment]::GetEnvironmentVariable("OP_SESSION_$accountName") ) {
             Write-Verbose "Attempt login with shorthand and grab session token"
-            $token = & op signin $accountName --raw
+            $token = & op account add $accountName --raw
 
             if ( $null -eq $token ) {
                 Write-Verbose "Attempt login with all parameters"
-                $token = & op signin $accountName $emailAddress $secretKey --raw
+                $token = & op account add $accountName $emailAddress $secretKey --raw
             }
         }
         else {
             Write-Verbose "Attempt login with shorthand and grab session token"
-            & op signin $accountName
+            & op account add $accountName
         }
 
         Write-Verbose "Cache session token to [OP_SESSION_$accountName] - $token"
         [System.Environment]::SetEnvironmentVariable("OP_SESSION_$accountName", $token)
 
         Write-Verbose "Test listing vaults final"
-        $vaults = & op list vaults 2>$null | ConvertFrom-Json
+        $vaults = & op vault list 2>$null | ConvertFrom-Json
     }
 
     $Vaults.name -contains $VaultName
@@ -60,28 +60,28 @@ function Get-SecretInfo {
         [hashtable] $AdditionalParameters
     )
 
-    $items = & op list items --categories Login,Password --vault $VaultName | ConvertFrom-Json
+    $items = & op item list --categories Login,Password --vault $VaultName --format=json | ConvertFrom-Json
 
     $keyList = [Collections.ArrayList]::new()
 
     foreach ($item in $items) {
-        if ( $keyList.Contains(($item.overview.title).ToLower()) ) {
-            Write-Verbose "Get-SecretInfo: An item with the same key has already been added. Key: [$($item.overview.title)]"
+        if ( $keyList.Contains(($item.title).ToLower()) ) {
+            Write-Verbose "Get-SecretInfo: An item with the same key has already been added. Key: [$($item.title)]"
         }
         else {
-            $type = switch ($item.templateUuid) {
-                '001' { [SecretType]::PSCredential }
-                '005' { [SecretType]::SecureString }
+            $type = switch ($item.category) {
+                'LOGIN' { [SecretType]::PSCredential }
+                'PASSWORD' { [SecretType]::SecureString }
                 Default { [SecretType]::Unknown }
             }
 
-            Write-Verbose $item.overview.title
+            Write-Verbose $item.title
             [SecretInformation]::new(
-                $item.overview.title,
+                $item.title,
                 $type,
                 $VaultName
             )
-            $keyList.Add(($item.overview.title).ToLower())
+            $keyList.Add(($item.title).ToLower())
         }
     }
 }
@@ -99,10 +99,10 @@ function Get-Secret {
         [hashtable] $AdditionalParameters
     )
     $totp = -1
-    $item = & op get item $Name --fields username,password,one-timepassword --vault $VaultName | ConvertFrom-Json -AsHashtable
+    $item = & op item get $Name --fields username,password,one-timepassword --vault $VaultName | ConvertFrom-Json -AsHashtable
     if (-not [string]::IsNullOrEmpty($item["one-timepassword"]) )
     {
-        $totp = & op get totp $Name --vault $VaultName 2>$nul
+        $totp = & op item get --otp $Name --vault $VaultName 2>$nul
     }
 
     if ( -not [string]::IsNullOrEmpty($item["password"]) ) {
@@ -125,7 +125,7 @@ function Get-Secret {
     }
 
     if ($totp -gt -1) {
-            $output | Add-Member -MemberType ScriptMethod -Name totp -Value {& op get totp $Name --vault $VaultName}.GetNewClosure() -PassThru
+            $output | Add-Member -MemberType ScriptMethod -Name totp -Value {& op item get --otp $Name --vault $VaultName}.GetNewClosure() -PassThru
     } else {
         $output
     }
@@ -144,7 +144,7 @@ function Set-Secret {
         [hashtable] $AdditionalParameters
     )
 
-    $item = & op get item $Name --fields title --vault $VaultName 2>$null
+    $item = & op item get $Name --fields title --vault $VaultName 2>$null
     $verb = if ($null -eq $item) { 'create' } else { 'edit' }
     Write-Verbose $verb
     $data = @{}
@@ -160,7 +160,7 @@ function Set-Secret {
 
             if ('create' -eq $verb ) {
                 Write-Verbose "Creating $Name"
-                $data = op get template $category | ConvertFrom-Json -AsHashtable
+                $data = op item template get $category | ConvertFrom-Json -AsHashtable
                 $data.password = $Secret
                 $endcodedData = $data | ConvertTo-Json | op encode
 
@@ -183,7 +183,7 @@ function Set-Secret {
 
             if ('create' -eq $verb ) {
                 Write-Verbose "Creating $Name"
-                $data = op get template $category | ConvertFrom-Json -AsHashtable
+                $data = op item template get $category | ConvertFrom-Json -AsHashtable
                 $data.password = ConvertFrom-SecureString -SecureString $Secret -AsPlainText
                 $endcodedData = $data | ConvertTo-Json | op encode
 
@@ -206,7 +206,7 @@ function Set-Secret {
 
             if ('create' -eq $verb ) {
                 Write-Verbose "Creating $Name"
-                $data = op get template $category | ConvertFrom-Json -AsHashtable
+                $data = op item template get $category | ConvertFrom-Json -AsHashtable
                 $data.fields | ForEach-Object {
                     if ($_.name -eq 'username') { $_.value = $Secret.UserName }
                     if ($_.name -eq 'password') { $_.value = $Secret.GetNetworkCredential().Password }
