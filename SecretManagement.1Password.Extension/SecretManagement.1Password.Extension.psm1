@@ -99,8 +99,8 @@ function Get-Secret {
         [hashtable] $AdditionalParameters
     )
     
-    $username = & op item get $Name --fields username --vault $VaultName --format=json | ConvertFrom-Json -AsHashtable
-    $password = & op item get $Name --fields password --vault $VaultName --format=json | ConvertFrom-Json -AsHashtable
+    $username = & op item get $Name --fields username --vault $VaultName --format=json | ConvertFrom-Json
+    $password = & op item get $Name --fields password --vault $VaultName --format=json | ConvertFrom-Json
     
     [securestring]$secureStringPassword = ConvertTo-SecureString $password.value -AsPlainText -Force
     
